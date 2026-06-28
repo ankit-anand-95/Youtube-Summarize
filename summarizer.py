@@ -65,6 +65,27 @@ def fetch_video_metadata(video_id: str):
         return "", ""
 
 
+def _fetch_via_worker(video_id: str):
+    """Fetch transcript via our Cloudflare Worker (bypasses all cloud IP bans)."""
+    import json as _json
+    worker_url = os.getenv("WORKER_URL", "").rstrip("/")
+    req = urllib.request.Request(
+        f"{worker_url}?videoId={video_id}",
+        headers={"User-Agent": "youtube-summarizer/1.0"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            data = _json.loads(resp.read().decode())
+    except urllib.error.HTTPError as e:
+        body = e.read().decode(errors="ignore")
+        raise ValueError(f"Worker error {e.code}: {body[:300]}")
+    transcript = (data.get("transcript") or "").strip()
+    lang = data.get("lang") or "en"
+    if not transcript:
+        raise ValueError(data.get("error") or "Worker returned empty transcript.")
+    return re.sub(r"\s+", " ", transcript).strip(), lang
+
+
 def _fetch_via_supadata(video_id: str):
     """Fetch transcript via Supadata API (works from any cloud IP)."""
     import urllib.request
@@ -142,10 +163,11 @@ def _fetch_via_ytdlp(video_id: str):
 
 
 def fetch_transcript(video_id: str):
-    # If Supadata key is set, use it directly (bypasses cloud IP blocks)
-    if os.getenv("SUPADATA_API_KEY", "").strip():
-        return _fetch_via_supadata(video_id)
+    # Cloudflare Worker is the primary method for production
+    if os.getenv("WORKER_URL", "").strip():
+        return _fetch_via_worker(video_id)
 
+    # Proxy fallback (for self-hosted setups)
     proxy_url = os.getenv("PROXY_URL", "").strip()
     proxies = {"https": proxy_url, "http": proxy_url} if proxy_url else None
     api = YouTubeTranscriptApi(proxies=proxies) if proxies else YouTubeTranscriptApi()
