@@ -1,0 +1,26 @@
+app = "youtube-summarizer-ai"
+primary_region = "iad"
+
+[build]
+
+[env]
+  DAILY_LIMIT = "10"
+  CLAUDE_MODEL = "claude-haiku-4-5-20251001"
+  PORT = "8080"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = true
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [http_service.concurrency]
+    type = "connections"
+    hard_limit = 25
+    soft_limit = 20
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 1
+  memory_mb = 512

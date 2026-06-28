@@ -2,6 +2,7 @@ import re
 import os
 import json
 import urllib.request
+import urllib.error
 from datetime import datetime
 from youtube_transcript_api import YouTubeTranscriptApi
 from youtube_transcript_api._errors import NoTranscriptFound, TranscriptsDisabled
@@ -65,109 +66,9 @@ def fetch_video_metadata(video_id: str):
         return "", ""
 
 
-def _fetch_via_worker(video_id: str):
-    """Fetch transcript via our Cloudflare Worker (bypasses all cloud IP bans)."""
-    import json as _json
-    worker_url = os.getenv("WORKER_URL", "").rstrip("/")
-    req = urllib.request.Request(
-        f"{worker_url}?videoId={video_id}",
-        headers={"User-Agent": "youtube-summarizer/1.0"},
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=20) as resp:
-            data = _json.loads(resp.read().decode())
-    except urllib.error.HTTPError as e:
-        body = e.read().decode(errors="ignore")
-        raise ValueError(f"Worker error {e.code}: {body[:300]}")
-    transcript = (data.get("transcript") or "").strip()
-    lang = data.get("lang") or "en"
-    if not transcript:
-        raise ValueError(data.get("error") or "Worker returned empty transcript.")
-    return re.sub(r"\s+", " ", transcript).strip(), lang
-
-
-def _fetch_via_supadata(video_id: str):
-    """Fetch transcript via Supadata API (works from any cloud IP)."""
-    import urllib.request
-    import urllib.error
-    import json as _json
-    key = os.getenv("SUPADATA_API_KEY", "").strip()
-    if not key:
-        raise ValueError("SUPADATA_API_KEY not set.")
-    url = f"https://api.supadata.ai/v1/youtube/transcript?videoId={video_id}&text=true"
-    req = urllib.request.Request(url, headers={
-        "x-api-key": key,
-        "Authorization": f"Bearer {key}",
-    })
-    try:
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            data = _json.loads(resp.read().decode())
-    except urllib.error.HTTPError as e:
-        body = e.read().decode(errors="ignore")
-        raise ValueError(f"Supadata API error {e.code}: {body[:300]}")
-    text = (data.get("content") or "").strip()
-    lang = data.get("lang") or "en"
-    if not text:
-        raise ValueError(f"Supadata returned empty transcript. Response: {str(data)[:200]}")
-    return re.sub(r"\s+", " ", text).strip(), lang
-
-
-def _fetch_via_ytdlp(video_id: str):
-    """Fallback transcript fetch using yt-dlp subtitle download."""
-    import yt_dlp
-    import tempfile
-    import json
-
-    url = f"https://www.youtube.com/watch?v={video_id}"
-    with tempfile.TemporaryDirectory() as tmpdir:
-        ydl_opts = {
-            "skip_download": True,
-            "writesubtitles": True,
-            "writeautomaticsub": True,
-            "subtitleslangs": ["en", "en-US", "en-GB"],
-            "subtitlesformat": "json3",
-            "outtmpl": os.path.join(tmpdir, "%(id)s"),
-            "quiet": True,
-            "no_warnings": True,
-        }
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            ydl.extract_info(url, download=True)
-
-        # Find the downloaded subtitle file
-        subtitle_file, lang_code = None, "en"
-        for fname in os.listdir(tmpdir):
-            if fname.endswith(".json3"):
-                subtitle_file = os.path.join(tmpdir, fname)
-                parts = fname.rsplit(".", 2)
-                if len(parts) >= 2:
-                    lang_code = parts[-2]
-                break
-
-        if not subtitle_file:
-            raise ValueError("No subtitles available for this video.")
-
-        with open(subtitle_file, "r", encoding="utf-8") as f:
-            data = json.load(f)
-
-        texts = []
-        for event in data.get("events", []):
-            for seg in event.get("segs", []):
-                t = seg.get("utf8", "")
-                if t and t != "\n":
-                    texts.append(t)
-
-        transcript = re.sub(r"\s+", " ", " ".join(texts)).strip()
-        if not transcript:
-            raise ValueError("Subtitle file was empty.")
-        return transcript, lang_code
-
-
 def fetch_transcript(video_id: str):
-    # Cloudflare Worker is the primary method for production
-    if os.getenv("WORKER_URL", "").strip():
-        return _fetch_via_worker(video_id)
-
-    # Proxy fallback (for self-hosted setups)
+    # Works directly on non-blocked hosts (Fly.io, local, Hetzner, etc.)
+    # Set PROXY_URL env var if your host's IPs are blocked by YouTube
     proxy_url = os.getenv("PROXY_URL", "").strip()
     proxies = {"https": proxy_url, "http": proxy_url} if proxy_url else None
     api = YouTubeTranscriptApi(proxies=proxies) if proxies else YouTubeTranscriptApi()
@@ -193,12 +94,8 @@ def fetch_transcript(video_id: str):
         raise ValueError("Transcripts are disabled for this video.")
     except NoTranscriptFound:
         raise ValueError("No transcript found. The creator may not have enabled captions.")
-    except Exception:
-        # youtube-transcript-api blocked (common on cloud IPs) — try yt-dlp
-        try:
-            return _fetch_via_ytdlp(video_id)
-        except Exception as e2:
-            raise ValueError(f"Could not fetch transcript: {str(e2)}")
+    except Exception as e:
+        raise ValueError(f"Could not fetch transcript: {str(e)}")
 
 
 def get_claude_client(api_key: str = None):

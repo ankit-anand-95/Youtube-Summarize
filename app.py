@@ -232,15 +232,15 @@ def api_summarize():
                 "summary_md": existing["summary"], "summary_html": to_html(existing["summary"]),
                 "transcript_length": 0, "lang": existing.get("lang", "en")})
 
-    # Daily limit check (cached hits don't count against quota)
-    allowed, remaining = check_and_increment_usage(current_user, DAILY_LIMIT)
-    if not allowed:
-        return jsonify({"error": f"Daily limit of {DAILY_LIMIT} summaries reached. Resets at midnight."}), 429
-
     try:
         transcript, lang = fetch_transcript(video_id)
     except ValueError as e:
         return jsonify({"error": str(e)}), 422
+
+    # Daily limit check — only after transcript confirmed available (failures don't burn quota)
+    allowed, remaining = check_and_increment_usage(current_user, DAILY_LIMIT)
+    if not allowed:
+        return jsonify({"error": f"Daily limit of {DAILY_LIMIT} summaries reached. Resets at midnight."}), 429
     try:
         summary_md = summarize_video(transcript=transcript,
             video_title=video_title or "Unknown Title",

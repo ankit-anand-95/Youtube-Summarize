@@ -1,5 +1,6 @@
 .env
 *.db
+*.db.bak
 __pycache__/
 *.pyc
 *.pyo
@@ -7,3 +8,4 @@ __pycache__/
 venv/
 .venv/
 instance/
+.fly/
