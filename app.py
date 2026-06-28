@@ -202,6 +202,19 @@ def index():
 def api_usage():
     return jsonify(get_usage_today(current_user, DAILY_LIMIT))
 
+@app.route("/api/usage/reset", methods=["POST"])
+@login_required
+def api_usage_reset():
+    """Admin-only: reset daily counter for current user."""
+    admin_email = os.getenv("ADMIN_EMAIL", "").strip().lower()
+    if not admin_email or current_user.email != admin_email:
+        return jsonify({"error": "Forbidden"}), 403
+    from db import db
+    current_user.daily_count = 0
+    current_user.count_date = ""
+    db.session.commit()
+    return jsonify({"success": True, "message": "Counter reset."})
+
 @app.route("/api/summarize", methods=["POST"])
 @login_required
 def api_summarize():
