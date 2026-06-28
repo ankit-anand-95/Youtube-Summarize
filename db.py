@@ -2,25 +2,9 @@ import os
 from datetime import datetime
 from flask_sqlalchemy import SQLAlchemy
 from flask_bcrypt import Bcrypt
-from cryptography.fernet import Fernet
 
 db = SQLAlchemy()
 bcrypt = Bcrypt()
-
-# ---------------------------------------------------------------------------
-# Fernet encryption for user API keys
-# ---------------------------------------------------------------------------
-def _get_fernet():
-    key = os.getenv("FERNET_KEY", "")
-    if not key:
-        key = Fernet.generate_key().decode()
-    return Fernet(key.encode() if isinstance(key, str) else key)
-
-def encrypt_key(plain: str) -> str:
-    return _get_fernet().encrypt(plain.encode()).decode()
-
-def decrypt_key(token: str) -> str:
-    return _get_fernet().decrypt(token.encode()).decode()
 
 
 # ---------------------------------------------------------------------------
@@ -31,7 +15,6 @@ class User(db.Model):
     id                = db.Column(db.Integer, primary_key=True)
     email             = db.Column(db.String(255), unique=True, nullable=False, index=True)
     password_hash     = db.Column(db.String(255), nullable=False)
-    encrypted_api_key = db.Column(db.Text, nullable=True)   # kept for migration compat, no longer used
     daily_count       = db.Column(db.Integer, default=0)
     count_date        = db.Column(db.String(20), default="")
     created_at        = db.Column(db.String(50), default=lambda: datetime.now().isoformat())
@@ -52,19 +35,6 @@ class User(db.Model):
     def check_password(self, password: str) -> bool:
         return bcrypt.check_password_hash(self.password_hash, password)
 
-    def set_api_key(self, plain_key: str):
-        self.encrypted_api_key = encrypt_key(plain_key)
-
-    def get_api_key(self) -> str:
-        if not self.encrypted_api_key:
-            return ""
-        try:
-            return decrypt_key(self.encrypted_api_key)
-        except Exception:
-            return ""
-
-    def has_api_key(self) -> bool:
-        return bool(self.encrypted_api_key)
 
 
 class Summary(db.Model):
@@ -101,10 +71,6 @@ def create_user(email: str, password: str):
     db.session.add(u)
     db.session.commit()
     return u
-
-def update_user_api_key(user, plain_key: str):
-    user.set_api_key(plain_key)
-    db.session.commit()
 
 
 def _row(s):
