@@ -67,13 +67,13 @@ def fetch_video_metadata(video_id: str):
 
 
 def fetch_transcript(video_id: str):
-    # Works directly on non-blocked hosts (Fly.io, local, Hetzner, etc.)
+    # Uses class-method API (youtube-transcript-api 0.6.x)
     # Set PROXY_URL env var if your host's IPs are blocked by YouTube
     proxy_url = os.getenv("PROXY_URL", "").strip()
     proxies = {"https": proxy_url, "http": proxy_url} if proxy_url else None
-    api = YouTubeTranscriptApi(proxies=proxies) if proxies else YouTubeTranscriptApi()
     try:
-        transcript_list = api.list(video_id)
+        kwargs = {"proxies": proxies} if proxies else {}
+        transcript_list = YouTubeTranscriptApi.list_transcripts(video_id, **kwargs)
         try:
             transcript = transcript_list.find_manually_created_transcript(["en"])
         except Exception:
