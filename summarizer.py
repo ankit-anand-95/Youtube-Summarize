@@ -68,18 +68,26 @@ def fetch_video_metadata(video_id: str):
 def _fetch_via_supadata(video_id: str):
     """Fetch transcript via Supadata API (works from any cloud IP)."""
     import urllib.request
+    import urllib.error
     import json as _json
     key = os.getenv("SUPADATA_API_KEY", "").strip()
     if not key:
         raise ValueError("SUPADATA_API_KEY not set.")
     url = f"https://api.supadata.ai/v1/youtube/transcript?videoId={video_id}&text=true"
-    req = urllib.request.Request(url, headers={"x-api-key": key})
-    with urllib.request.urlopen(req, timeout=15) as resp:
-        data = _json.loads(resp.read().decode())
+    req = urllib.request.Request(url, headers={
+        "x-api-key": key,
+        "Authorization": f"Bearer {key}",
+    })
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            data = _json.loads(resp.read().decode())
+    except urllib.error.HTTPError as e:
+        body = e.read().decode(errors="ignore")
+        raise ValueError(f"Supadata API error {e.code}: {body[:300]}")
     text = (data.get("content") or "").strip()
     lang = data.get("lang") or "en"
     if not text:
-        raise ValueError("Supadata returned empty transcript.")
+        raise ValueError(f"Supadata returned empty transcript. Response: {str(data)[:200]}")
     return re.sub(r"\s+", " ", text).strip(), lang
 
 
