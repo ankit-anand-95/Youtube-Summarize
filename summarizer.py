@@ -65,6 +65,24 @@ def fetch_video_metadata(video_id: str):
         return "", ""
 
 
+def _fetch_via_supadata(video_id: str):
+    """Fetch transcript via Supadata API (works from any cloud IP)."""
+    import urllib.request
+    import json as _json
+    key = os.getenv("SUPADATA_API_KEY", "").strip()
+    if not key:
+        raise ValueError("SUPADATA_API_KEY not set.")
+    url = f"https://api.supadata.ai/v1/youtube/transcript?videoId={video_id}&text=true"
+    req = urllib.request.Request(url, headers={"x-api-key": key})
+    with urllib.request.urlopen(req, timeout=15) as resp:
+        data = _json.loads(resp.read().decode())
+    text = (data.get("content") or "").strip()
+    lang = data.get("lang") or "en"
+    if not text:
+        raise ValueError("Supadata returned empty transcript.")
+    return re.sub(r"\s+", " ", text).strip(), lang
+
+
 def _fetch_via_ytdlp(video_id: str):
     """Fallback transcript fetch using yt-dlp subtitle download."""
     import yt_dlp
@@ -116,6 +134,10 @@ def _fetch_via_ytdlp(video_id: str):
 
 
 def fetch_transcript(video_id: str):
+    # If Supadata key is set, use it directly (bypasses cloud IP blocks)
+    if os.getenv("SUPADATA_API_KEY", "").strip():
+        return _fetch_via_supadata(video_id)
+
     proxy_url = os.getenv("PROXY_URL", "").strip()
     proxies = {"https": proxy_url, "http": proxy_url} if proxy_url else None
     api = YouTubeTranscriptApi(proxies=proxies) if proxies else YouTubeTranscriptApi()
