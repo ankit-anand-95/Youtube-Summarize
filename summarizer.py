@@ -65,8 +65,60 @@ def fetch_video_metadata(video_id: str):
         return "", ""
 
 
+def _fetch_via_ytdlp(video_id: str):
+    """Fallback transcript fetch using yt-dlp subtitle download."""
+    import yt_dlp
+    import tempfile
+    import json
+
+    url = f"https://www.youtube.com/watch?v={video_id}"
+    with tempfile.TemporaryDirectory() as tmpdir:
+        ydl_opts = {
+            "skip_download": True,
+            "writesubtitles": True,
+            "writeautomaticsub": True,
+            "subtitleslangs": ["en", "en-US", "en-GB"],
+            "subtitlesformat": "json3",
+            "outtmpl": os.path.join(tmpdir, "%(id)s"),
+            "quiet": True,
+            "no_warnings": True,
+        }
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            ydl.extract_info(url, download=True)
+
+        # Find the downloaded subtitle file
+        subtitle_file, lang_code = None, "en"
+        for fname in os.listdir(tmpdir):
+            if fname.endswith(".json3"):
+                subtitle_file = os.path.join(tmpdir, fname)
+                parts = fname.rsplit(".", 2)
+                if len(parts) >= 2:
+                    lang_code = parts[-2]
+                break
+
+        if not subtitle_file:
+            raise ValueError("No subtitles available for this video.")
+
+        with open(subtitle_file, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        texts = []
+        for event in data.get("events", []):
+            for seg in event.get("segs", []):
+                t = seg.get("utf8", "")
+                if t and t != "\n":
+                    texts.append(t)
+
+        transcript = re.sub(r"\s+", " ", " ".join(texts)).strip()
+        if not transcript:
+            raise ValueError("Subtitle file was empty.")
+        return transcript, lang_code
+
+
 def fetch_transcript(video_id: str):
-    api = YouTubeTranscriptApi()
+    proxy_url = os.getenv("PROXY_URL", "").strip()
+    proxies = {"https": proxy_url, "http": proxy_url} if proxy_url else None
+    api = YouTubeTranscriptApi(proxies=proxies) if proxies else YouTubeTranscriptApi()
     try:
         transcript_list = api.list(video_id)
         try:
@@ -89,8 +141,12 @@ def fetch_transcript(video_id: str):
         raise ValueError("Transcripts are disabled for this video.")
     except NoTranscriptFound:
         raise ValueError("No transcript found. The creator may not have enabled captions.")
-    except Exception as e:
-        raise ValueError(f"Could not fetch transcript: {str(e)}")
+    except Exception:
+        # youtube-transcript-api blocked (common on cloud IPs) — try yt-dlp
+        try:
+            return _fetch_via_ytdlp(video_id)
+        except Exception as e2:
+            raise ValueError(f"Could not fetch transcript: {str(e2)}")
 
 
 def get_claude_client(api_key: str = None):
