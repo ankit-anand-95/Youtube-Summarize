@@ -1,0 +1,875 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>YouTube Content Summarizer</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    :root{
+      --bg:#0d0d0f;
+      --surface:#16161a;
+      --surface2:#1e1e24;
+      --border:#2a2a32;
+      --accent:#e5534b;
+      --accent2:#f07167;
+      --text:#ececec;
+      --muted:#666;
+      --success:#3fb950;
+      --r:10px;
+    }
+    html,body{height:100%}
+    body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);color:var(--text);display:flex;flex-direction:column;min-height:100vh}
+
+    /* Header */
+    header{background:var(--surface);border-bottom:1px solid var(--border);padding:0 24px;height:54px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:200}
+    .logo{display:flex;align-items:center;gap:8px;font-weight:700;font-size:.97rem}
+    .logo-icon{color:var(--accent);font-size:1.2rem}
+
+    /* Layout */
+    .layout{display:flex;flex:1;overflow:hidden;height:calc(100vh - 54px)}
+
+    /* Sidebar */
+    .sidebar{width:252px;min-width:252px;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden}
+    .sb-head{padding:13px 13px 9px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+    .sb-head h3{font-size:.7rem;text-transform:uppercase;letter-spacing:1px;color:var(--muted)}
+    .sb-list{flex:1;overflow-y:auto;padding:6px}
+    .sb-item{padding:9px 10px;border-radius:7px;cursor:pointer;margin-bottom:3px;border:1px solid transparent;transition:background .12s;position:relative;display:flex;align-items:flex-start;gap:6px}
+    .sb-item:hover{background:var(--surface2)}
+    .sb-item.active{background:var(--surface2);border-color:var(--border)}
+    .sb-item-text{flex:1;min-width:0}
+    .sb-item .st{font-size:.83rem;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .sb-item .sm{font-size:.72rem;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .sb-del{display:none;align-items:center;justify-content:center;width:20px;height:20px;border-radius:4px;color:var(--muted);font-size:.75rem;flex-shrink:0;margin-top:1px;border:none;background:transparent;cursor:pointer;line-height:1}
+    .sb-del:hover{background:var(--accent);color:#fff}
+    .sb-item:hover .sb-del{display:flex}
+    .sb-empty{padding:20px 12px;text-align:center;color:var(--muted);font-size:.8rem}
+    .sb-search{padding:7px 8px;border-bottom:1px solid var(--border)}
+    .sb-search input{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:6px 10px;color:var(--text);font-size:.8rem;outline:none}
+    .sb-search input:focus{border-color:var(--accent)}
+    .sb-search input::placeholder{color:var(--muted)}
+    .search-result-snippet{font-size:.7rem;color:var(--muted);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+    /* Playlist modal */
+    .pl-list{max-height:320px;overflow-y:auto;margin:12px 0;display:flex;flex-direction:column;gap:6px}
+    .pl-item{display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--surface2);border-radius:8px;cursor:pointer}
+    .pl-item:hover{background:var(--border)}
+    .pl-item input[type=checkbox]{accent-color:var(--accent);width:16px;height:16px;flex-shrink:0;cursor:pointer}
+    .pl-item-info{flex:1;min-width:0}
+    .pl-item-title{font-size:.82rem;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .pl-item-meta{font-size:.7rem;color:var(--muted);margin-top:1px}
+    .pl-progress{background:var(--surface2);border-radius:8px;overflow:hidden;height:6px;margin:10px 0}
+    .pl-progress-bar{height:100%;background:var(--accent);transition:width .3s;width:0%}
+    .pl-status{font-size:.8rem;color:var(--muted);text-align:center;margin-top:6px}
+    .sb-foot{padding:10px;border-top:1px solid var(--border)}
+
+    /* Main */
+    .main{flex:1;display:flex;flex-direction:column;overflow:hidden}
+
+    /* Input */
+    .input-panel{background:var(--surface);border-bottom:1px solid var(--border);padding:16px 24px}
+    .input-panel label{font-size:.68rem;text-transform:uppercase;letter-spacing:1px;color:var(--muted);display:block;margin-bottom:9px}
+    .url-row{display:flex;gap:8px;margin-bottom:8px}
+    .url-row input{flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);padding:10px 14px;color:var(--text);font-size:.91rem;outline:none;transition:border-color .2s}
+    .url-row input:focus{border-color:var(--accent)}
+    .url-row input::placeholder{color:var(--muted)}
+    .meta-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+    .meta-row input{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:.81rem;outline:none;transition:border-color .2s}
+    .meta-row input:focus{border-color:var(--accent)}
+    .meta-row input::placeholder{color:var(--muted)}
+
+    /* Buttons */
+    .btn{display:inline-flex;align-items:center;gap:5px;padding:9px 16px;border-radius:var(--r);font-size:.86rem;font-weight:600;cursor:pointer;border:none;transition:all .14s;white-space:nowrap}
+    .btn-primary{background:var(--accent);color:#fff}
+    .btn-primary:hover:not(:disabled){background:var(--accent2);transform:translateY(-1px)}
+    .btn-primary:disabled{opacity:.4;cursor:not-allowed}
+    .btn-ghost{background:var(--surface2);color:var(--text);border:1px solid var(--border)}
+    .btn-ghost:hover{background:var(--border)}
+    .btn-sm{padding:6px 11px;font-size:.78rem}
+
+    /* Output */
+    .output-area{flex:1;overflow-y:auto;padding:28px 24px;background:#0b0b0e}
+
+    /* Empty / Loading */
+    .empty-state{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:13px;color:var(--muted);text-align:center}
+    .empty-state .icon{font-size:3rem}
+    .empty-state h3{font-size:1rem;color:var(--text)}
+    .empty-state p{font-size:.86rem;max-width:320px;line-height:1.65}
+    .loading-state{display:none;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:14px;color:var(--muted)}
+    .spinner{width:40px;height:40px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .75s linear infinite}
+    @keyframes spin{to{transform:rotate(360deg)}}
+
+    /* Article card — dark mode */
+    .article-wrap{max-width:760px;margin:0 auto;background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden;box-shadow:0 8px 40px rgba(0,0,0,.5)}
+    .article-topbar{background:var(--surface2);padding:11px 22px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border)}
+    .article-topbar .at-meta .at-title{font-size:.88rem;font-weight:600}
+    .article-topbar .at-meta .at-sub{font-size:.73rem;color:var(--muted);margin-top:2px}
+    .article-topbar .at-actions{display:flex;gap:6px}
+
+    /* Article body — dark, editorial */
+    .article-body{padding:44px 56px 56px;color:#e0e0e0;line-height:1.85;font-size:1rem}
+    @media(max-width:680px){.article-body{padding:24px 18px 36px}}
+
+    .article-body h1{font-size:1.9rem;font-weight:800;line-height:1.2;letter-spacing:-.4px;margin-bottom:12px;color:#f5f5f5}
+    .article-body h2{font-size:1.2rem;font-weight:700;margin:36px 0 12px;color:#f0f0f0;border-bottom:1px solid var(--border);padding-bottom:8px}
+    .article-body h3{font-size:1.05rem;font-weight:700;margin:26px 0 8px;color:#e8e8e8}
+    .article-body h4{font-size:.88rem;font-weight:600;margin:18px 0 6px;color:#aaa;text-transform:uppercase;letter-spacing:.5px}
+    .article-body p{font-size:1rem;margin-bottom:16px;color:#ccc;font-family:Georgia,"Times New Roman",serif;line-height:1.8}
+    .article-body strong{color:#f0f0f0}
+    .article-body a{color:#f07167;text-decoration:underline}
+    .article-body hr{border:none;border-top:1px solid var(--border);margin:28px 0}
+
+    /* Pull quote */
+    .article-body blockquote{border-left:3px solid var(--accent);background:#1f1418;margin:24px 0;padding:16px 22px;border-radius:0 8px 8px 0;font-size:1.05rem;font-style:italic;color:#ddd;font-family:Georgia,serif}
+    .article-body blockquote p{margin:0;font-size:1rem;color:#ddd}
+
+    /* Lists */
+    .article-body ul,.article-body ol{padding-left:22px;margin-bottom:16px}
+    .article-body li{font-size:.97rem;margin-bottom:7px;color:#bbb;font-family:Georgia,serif;line-height:1.75}
+    .article-body li strong{color:#e8e8e8}
+
+    /* Code */
+    .article-body pre{background:#0d1117;border:1px solid #30363d;border-radius:9px;padding:18px 22px;overflow-x:auto;margin:22px 0}
+    .article-body code{font-family:"JetBrains Mono","Fira Code",monospace;font-size:.87rem}
+    .article-body p code,.article-body li code{background:#1e1e2e;color:#f07167;padding:2px 6px;border-radius:4px;font-size:.84em}
+
+    /* Mermaid diagram */
+    .mermaid-wrap{background:#111318;border:1px solid var(--border);border-radius:12px;padding:28px 20px 24px;margin:28px 0;text-align:center;overflow-x:auto;overflow-y:visible}
+    .mermaid-label{font-size:.68rem;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:18px;font-weight:600}
+    .mermaid{min-height:160px;overflow:visible}
+    .mermaid svg{max-width:none;width:auto;height:auto;min-height:140px;display:block;margin:0 auto;overflow:visible}
+
+    /* Custom modal */
+    .modal-backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:500;align-items:center;justify-content:center}
+    .modal-backdrop.open{display:flex}
+    .modal{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:28px;min-width:360px;max-width:480px;box-shadow:0 20px 60px rgba(0,0,0,.6)}
+    .modal h3{font-size:1rem;font-weight:700;margin-bottom:6px}
+    .modal p{font-size:.84rem;color:var(--muted);margin-bottom:18px;line-height:1.5}
+    .modal input{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-size:.91rem;outline:none;margin-bottom:16px}
+    .modal input:focus{border-color:var(--accent)}
+    .modal-actions{display:flex;gap:8px;justify-content:flex-end}
+
+    /* Tags */
+    .tags{display:flex;flex-wrap:wrap;gap:7px;margin-top:28px;padding-top:20px;border-top:1px solid var(--border)}
+    .tag{background:#2a1518;color:var(--accent2);border:1px solid #3d2020;border-radius:20px;padding:4px 11px;font-size:.76rem;font-weight:600}
+
+    /* Content type badge */
+    .ct-badge{display:inline-block;background:#1e2030;border:1px solid var(--border);border-radius:6px;padding:3px 9px;font-size:.72rem;font-weight:700;color:#7c83ff;text-transform:uppercase;letter-spacing:.5px;margin-bottom:20px}
+
+    /* Meta strip */
+    .meta-strip{display:flex;align-items:center;gap:14px;margin-bottom:28px;padding-bottom:18px;border-bottom:1px solid var(--border);font-size:.8rem;color:var(--muted);flex-wrap:wrap}
+    .meta-strip a{color:var(--muted);text-decoration:none}
+    .meta-strip a:hover{color:var(--accent2)}
+
+    /* Table */
+    .article-body table{width:100%;border-collapse:collapse;margin:20px 0;font-size:.88rem}
+    .article-body th{background:#1a1a24;color:#e0e0e0;padding:10px 14px;text-align:left;border:1px solid var(--border);font-weight:600}
+    .article-body td{padding:9px 14px;border:1px solid var(--border);color:#bbb;vertical-align:top}
+    .article-body tr:nth-child(even) td{background:#13131a}
+
+    /* Error */
+    .error-box{background:#1a0a0a;border:1px solid #5a2020;border-radius:var(--r);padding:16px 20px;color:#ff8888;font-size:.9rem;max-width:760px;margin:0 auto}
+
+    /* Toast */
+    .toast{position:fixed;bottom:22px;right:22px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:11px 17px;font-size:.86rem;z-index:999;transform:translateY(14px);opacity:0;transition:all .2s}
+    .toast.show{transform:translateY(0);opacity:1}
+    .toast.success{border-color:var(--success);color:var(--success)}
+    .toast.error{border-color:var(--accent);color:var(--accent2)}
+
+    /* Scrollbar */
+    ::-webkit-scrollbar{width:5px}
+    ::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+
+    /* Print / PDF — force white for readability */
+    @media print{
+      header,.sidebar,.input-panel,.article-topbar{display:none!important}
+      body,.layout,.main,.output-area{display:block!important;overflow:visible!important;height:auto!important;background:white!important;color:black!important}
+      .article-wrap{box-shadow:none!important;border:none!important;border-radius:0!important;max-width:100%!important}
+      .article-body{padding:20px!important;color:#111!important}
+      .article-body p,.article-body li{color:#222!important;font-family:Georgia,serif!important}
+      .article-body h1,.article-body h2,.article-body h3{color:#111!important}
+      .article-body blockquote{background:#fef2f2!important;border-left:3px solid #dc2626!important;color:#374151!important}
+      .article-body blockquote p{color:#374151!important}
+      .article-body pre{background:#f3f4f6!important;border:1px solid #e5e7eb!important}
+      .mermaid-wrap{background:#f9fafb!important;border:1px solid #e5e7eb!important}
+      .tags{border-top:1px solid #e5e7eb!important}
+      .tag{background:#fef2f2!important;color:#dc2626!important;border-color:#fecaca!important}
+      .article-body table th{background:#f3f4f6!important;color:#111!important}
+      .article-body table td{color:#333!important}
+      .mermaid-wrap,.article-body pre,blockquote{break-inside:avoid}
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo"><span class="logo-icon">▶</span> YouTube Content Summarizer</div>
+  <div style="display:flex;align-items:center;gap:8px">
+    <span id="usageBadge" style="font-size:.75rem;color:var(--muted);padding:4px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:20px"></span>
+    <button class="btn btn-ghost btn-sm" onclick="openDigestModal()">📋 Weekly Digest</button>
+    <a href="/logout" class="btn btn-ghost btn-sm" style="text-decoration:none;color:var(--text)">Sign out</a>
+  </div>
+</header>
+
+<div class="layout">
+  <aside class="sidebar">
+    <div class="sb-head">
+      <h3>History</h3>
+      <div style="display:flex;gap:4px">
+        <button class="btn btn-ghost btn-sm" onclick="clearAll()" title="Clear all">✕</button>
+      </div>
+    </div>
+    <div class="sb-search">
+      <input type="text" id="searchInput" placeholder="🔍 Search summaries…" oninput="onSearch(this.value)" />
+    </div>
+    <div class="sb-list" id="sidebarList">
+      <div class="sb-empty" id="sbEmpty">No summaries yet</div>
+    </div>
+    <div class="sb-foot">
+      <button class="btn btn-ghost btn-sm" style="width:100%" onclick="openDigestModal()">📋 Weekly Digest</button>
+    </div>
+  </aside>
+
+  <!-- Playlist Modal -->
+  <div class="modal-backdrop" id="playlistModal">
+    <div class="modal" style="min-width:500px;max-width:640px">
+      <h3>📋 Playlist: <span id="plTitle" style="font-weight:400;color:var(--muted)"></span></h3>
+      <p style="margin-bottom:8px">Select videos to summarize. Already-processed videos are pre-checked.</p>
+      <div style="display:flex;gap:8px;margin-bottom:8px">
+        <button class="btn btn-ghost btn-sm" onclick="plSelectAll(true)">Select All</button>
+        <button class="btn btn-ghost btn-sm" onclick="plSelectAll(false)">Deselect All</button>
+        <span id="plSelCount" style="font-size:.8rem;color:var(--muted);margin-left:auto;align-self:center"></span>
+      </div>
+      <div class="pl-list" id="plList"></div>
+      <div class="pl-progress" id="plProgressWrap" style="display:none">
+        <div class="pl-progress-bar" id="plProgressBar"></div>
+      </div>
+      <p class="pl-status" id="plStatus"></p>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" id="plCancelBtn" onclick="closePlaylistModal()">Cancel</button>
+        <button class="btn btn-primary" id="plStartBtn" onclick="startPlaylistSummarize()">⚡ Summarize Selected</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Weekly Digest Modal -->
+  <div class="modal-backdrop" id="digestModal">
+    <div class="modal">
+      <h3>📋 Generate Weekly Digest</h3>
+      <p id="digestModalDesc">Compile all <strong id="digestCount">0</strong> saved summaries into a newsletter-ready digest.</p>
+      <input type="text" id="digestWeekInput" placeholder="Week label (e.g. Jun 23–29) — optional" />
+      <div class="modal-actions">
+        <button class="btn btn-ghost" onclick="closeDigestModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="confirmDigest()">Generate</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="main">
+    <div class="input-panel">
+      <label>Summarize a YouTube Video</label>
+      <div class="url-row">
+        <input type="text" id="urlInput" placeholder="Paste any YouTube URL…" />
+        <button class="btn btn-primary" id="summarizeBtn" onclick="summarize()">⚡ Summarize</button>
+      </div>
+      <div class="meta-row">
+        <input type="text" id="titleInput" placeholder="Video title (optional)" />
+        <input type="text" id="channelInput" placeholder="Channel name (optional)" />
+        <input type="text" id="dateInput" placeholder="Date (optional)" />
+      </div>
+    </div>
+
+    <div class="output-area" id="outputArea">
+      <div class="empty-state" id="emptyState">
+        <div class="icon">🎬</div>
+        <h3>Paste a YouTube URL to begin</h3>
+        <p>Detects content type automatically. Generates structured summary + Mermaid diagram. History persists across sessions.</p>
+      </div>
+      <div class="loading-state" id="loadingState">
+        <div class="spinner"></div>
+        <p id="loadingMsg">Fetching transcript…</p>
+      </div>
+      <div id="articleOutput"></div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  mermaid.initialize({
+    startOnLoad: false,
+    theme: 'base',
+    securityLevel: 'loose',
+    themeVariables: {
+      primaryColor: '#1e2030',
+      primaryTextColor: '#e0e0e0',
+      primaryBorderColor: '#404060',
+      lineColor: '#7c83ff',
+      secondaryColor: '#16161a',
+      tertiaryColor: '#1a1a24',
+      background: '#111318',
+      mainBkg: '#1e2030',
+      nodeBorder: '#404060',
+      clusterBkg: '#16161a',
+      titleColor: '#f0f0f0',
+      edgeLabelBackground: '#1e2030',
+      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+      fontSize: '18px',
+    },
+    flowchart: { curve: 'basis', padding: 40, nodeSpacing: 60, rankSpacing: 70, htmlLabels: false },
+    mindmap: { padding: 16 },
+  });
+
+  let historyItems = [];
+
+  // Load history on startup
+  (async () => {
+    try {
+      const r = await fetch('/api/history');
+      const d = await r.json();
+      historyItems = d.summaries || [];
+      renderSidebar();
+    } catch {}
+  })();
+
+  // Sidebar — keep sbEmpty as a persistent detached node so getElementById always works
+  const _sbEmpty = document.getElementById('sbEmpty');
+
+  function renderSidebar() {
+    const list = document.getElementById('sidebarList');
+    // Clear only sb-items, not the empty placeholder
+    list.querySelectorAll('.sb-item').forEach(el => el.remove());
+    if (!historyItems.length) {
+      if (!list.contains(_sbEmpty)) list.appendChild(_sbEmpty);
+      _sbEmpty.style.display = '';
+      return;
+    }
+    _sbEmpty.style.display = 'none';
+    if (list.contains(_sbEmpty)) list.removeChild(_sbEmpty);
+    historyItems.forEach(s => {
+      const el = document.createElement('div');
+      el.className = 'sb-item';
+      el.dataset.id = s.id;
+      el.innerHTML = `
+        <div class="sb-item-text">
+          <div class="st">${escHtml(s.title)}</div>
+          <div class="sm">${escHtml(s.channel)} · ${fmtDate(s.created_at)}</div>
+        </div>
+        <button class="sb-del" title="Delete" onclick="event.stopPropagation();deleteSummary(${s.id})">✕</button>`;
+      el.addEventListener('click', () => loadSummary(s.id));
+      list.appendChild(el);
+    });
+  }
+  function setActive(id) {
+    document.querySelectorAll('.sb-item').forEach(el => el.classList.toggle('active', el.dataset.id == id));
+  }
+
+  // Detect playlist URLs
+  function isPlaylist(url) {
+    return url.includes('list=') && !url.includes('watch?v=');
+  }
+
+  // Summarize
+  async function summarize() {
+    const url     = document.getElementById('urlInput').value.trim();
+    const title   = document.getElementById('titleInput').value.trim();
+    const channel = document.getElementById('channelInput').value.trim();
+    const date    = document.getElementById('dateInput').value.trim();
+    if (!url) { showToast('Paste a YouTube URL first.', 'error'); return; }
+
+    // Playlist detection
+    if (isPlaylist(url)) { loadPlaylist(url); return; }
+
+    setLoading(true);
+    let data;
+    try {
+      const res = await fetch('/api/summarize', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ url, title, channel, date }),
+      });
+      try {
+        data = await res.json();
+      } catch (jsonErr) {
+        setLoading(false);
+        showError('Server error — check the Flask terminal for the traceback.');
+        return;
+      }
+      if (!res.ok) { setLoading(false); showError(data.error || 'Server error.'); return; }
+    } catch (err) {
+      setLoading(false); showError('Network error — is the server running?'); return;
+    }
+
+    setLoading(false);
+    try {
+      historyItems.unshift({ id: data.id, title: data.title, channel: data.channel, created_at: new Date().toISOString() });
+      renderSidebar();
+      renderArticle(data.id, data.title, data.channel, data.summary_html || data.summary_md || '(empty)', data.lang);
+      showToast('✓ Summary ready', 'success');
+      refreshUsage();
+    } catch(renderErr) {
+      console.error('Render error:', renderErr);
+      showError('Summary received but render failed: ' + renderErr.message);
+    }
+  }
+
+  // Load from sidebar
+  async function loadSummary(id) {
+    setLoading(true);
+    let data;
+    try {
+      const res = await fetch(`/api/summary/${id}`);
+      data = await res.json();
+      if (!res.ok) { setLoading(false); showToast('Could not load.', 'error'); return; }
+    } catch { setLoading(false); showToast('Network error.', 'error'); return; }
+    setLoading(false);
+    renderArticle(data.id, data.title, data.channel, data.summary_html, data.lang);
+  }
+
+  // Safe helper — getElementById that never throws on null
+  function hide(id) { const el = document.getElementById(id); if (el) el.style.display = 'none'; }
+  function show(id, d) { const el = document.getElementById(id); if (el) el.style.display = d || ''; }
+
+  // Render article
+  function renderArticle(id, title, channel, html, lang) {
+    hide('emptyState');
+    setActive(id);
+    const LANG_NAMES = { hi:'Hindi', es:'Spanish', fr:'French', de:'German', pt:'Portuguese', ja:'Japanese', ko:'Korean', zh:'Chinese', ar:'Arabic', ru:'Russian', it:'Italian' };
+    const langNote = (lang && lang !== 'en') ? `<span style="color:#f59e0b;font-size:.75rem" title="Transcript language: ${lang}">⚠ ${LANG_NAMES[lang] || lang.toUpperCase()} transcript</span>` : '';
+
+    document.getElementById('articleOutput').innerHTML = `
+      <div class="article-wrap" id="articleWrap">
+        <div class="article-topbar">
+          <div class="at-meta">
+            <div class="at-title">${escHtml(title)}</div>
+            <div class="at-sub">${escHtml(channel)} ${langNote}</div>
+          </div>
+          <div class="at-actions">
+            <button class="btn btn-ghost btn-sm" onclick="copyMd(${id})">📋 MD</button>
+            <button class="btn btn-ghost btn-sm" onclick="exportObsidian(${id})">🟣 Obsidian</button>
+            <button class="btn btn-ghost btn-sm" onclick="exportPdf()">⬇ PDF</button>
+            <button class="btn btn-ghost btn-sm" onclick="window.print()">🖨 Print</button>
+            <button class="btn btn-ghost btn-sm" onclick="deleteSummary(${id})" title="Delete" style="color:var(--accent)">🗑</button>
+          </div>
+        </div>
+        <div class="article-body" id="articleBody">${html}</div>
+      </div>`;
+
+    fixMermaidBlocks();
+    renderMermaid();
+    try { hljs.highlightAll(); } catch(e) {}
+    fixTags();
+  }
+
+  // Strip newlines inside Mermaid node labels: ["Label\nSubtext"] → ["Label"]
+  function cleanMermaidText(text) {
+    // Handle escaped \n
+    text = text.replace(/(\["[^"]*?)\\n[^"]*?("\])/g, '$1$2');
+    // Handle real newlines inside quoted labels
+    text = text.replace(/(\["[^"]*?)\n[^"]*?("\])/g, '$1$2');
+    // Same for single-quoted labels
+    text = text.replace(/(\('[^']*?)\\n[^']*?('\))/g, '$1$2');
+    text = text.replace(/(\('[^']*?)\n[^']*?('\))/g, '$1$2');
+    return text;
+  }
+
+  // DOM-based mermaid block replacement (reliable)
+  function fixMermaidBlocks() {
+    const body = document.getElementById('articleBody');
+    if (!body) return;
+    body.querySelectorAll('code.language-mermaid').forEach(code => {
+      const rawText = cleanMermaidText(code.textContent);
+      const pre = code.closest('pre');
+      const wrap = document.createElement('div');
+      wrap.className = 'mermaid-wrap';
+      const label = document.createElement('div');
+      label.className = 'mermaid-label';
+      label.textContent = '📊 Diagram';
+      const mDiv = document.createElement('div');
+      mDiv.className = 'mermaid';
+      mDiv.textContent = rawText;
+      wrap.appendChild(label);
+      wrap.appendChild(mDiv);
+      if (pre && pre.parentNode) pre.parentNode.replaceChild(wrap, pre);
+      else if (code.parentNode) code.parentNode.replaceChild(wrap, code);
+    });
+  }
+
+  async function renderMermaid() {
+    if (typeof mermaid === 'undefined') return;
+    const els = document.querySelectorAll('.mermaid');
+    for (let i = 0; i < els.length; i++) {
+      const el = els[i];
+      const rawText = cleanMermaidText(el.textContent.trim());
+      if (!rawText) continue;
+      try {
+        const uid = `mermaid-${Date.now()}-${i}`;
+        const { svg } = await mermaid.render(uid, rawText);
+        el.innerHTML = svg;
+        const svgEl = el.querySelector('svg');
+        if (!svgEl) continue;
+
+        // Block display with auto margin centers small diagrams; wide ones scroll from left
+        svgEl.style.display = 'block';
+        svgEl.style.margin = '0 auto';
+        svgEl.style.overflow = 'visible';
+
+        // Merge any tspans Mermaid split across lines into one line,
+        // and remove the separator line it draws between wrapped lines.
+        // This is the ONLY post-processing needed — do NOT touch viewBox/width/height.
+        svgEl.querySelectorAll('text').forEach(textEl => {
+          const tspans = Array.from(textEl.querySelectorAll('tspan'));
+          if (tspans.length > 1) {
+            const joined = tspans.map(t => t.textContent.trim()).filter(Boolean).join(' ');
+            tspans[0].textContent = joined;
+            tspans.slice(1).forEach(t => t.remove());
+          }
+        });
+        svgEl.querySelectorAll('.label line, .node line').forEach(l => l.remove());
+
+      } catch (e) {
+        el.style.cssText = 'color:#f07167;font-size:.8rem;padding:8px;text-align:center';
+        el.textContent = 'Could not render diagram';
+        console.warn('Mermaid error:', e);
+      }
+    }
+  }
+
+  // Convert #tag lines to styled pills
+  function fixTags() {
+    const body = document.getElementById('articleBody');
+    if (!body) return;
+    body.querySelectorAll('p, li').forEach(el => {
+      const text = el.textContent.trim();
+      if ((text.match(/#[A-Za-z]/g) || []).length >= 2) {
+        const tags = text.match(/#[A-Za-z]\w*/g);
+        if (tags && tags.length >= 2) {
+          const wrap = document.createElement('div');
+          wrap.className = 'tags';
+          tags.forEach(t => {
+            const span = document.createElement('span');
+            span.className = 'tag';
+            span.textContent = t;
+            wrap.appendChild(span);
+          });
+          el.replaceWith(wrap);
+        }
+      }
+    });
+  }
+
+  // Copy markdown
+  async function copyMd(id) {
+    try {
+      const res = await fetch(`/api/summary/${id}`);
+      const data = await res.json();
+      await navigator.clipboard.writeText(data.summary);
+      showToast('Copied!', 'success');
+    } catch { showToast('Could not copy.', 'error'); }
+  }
+
+  // PDF export
+  function exportPdf() {
+    const el = document.getElementById('articleWrap');
+    if (!el || typeof html2pdf === 'undefined') { window.print(); return; }
+    const topbar = el.querySelector('.article-topbar');
+    if (topbar) topbar.style.display = 'none';
+    html2pdf().set({
+      margin: [12,12,12,12],
+      filename: 'summary.pdf',
+      image: { type: 'jpeg', quality: 0.97 },
+      html2canvas: { scale: 2, useCORS: true, backgroundColor: '#16161a' },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+    }).from(el).save().then(() => { if (topbar) topbar.style.display = ''; });
+  }
+
+  // Weekly digest
+  // Weekly Digest Modal
+  function openDigestModal() {
+    if (!historyItems.length) { showToast('Summarize at least one video first.', 'error'); return; }
+    document.getElementById('digestCount').textContent = historyItems.length;
+    document.getElementById('digestWeekInput').value = '';
+    document.getElementById('digestModal').classList.add('open');
+    setTimeout(() => document.getElementById('digestWeekInput').focus(), 100);
+  }
+  function closeDigestModal() {
+    document.getElementById('digestModal').classList.remove('open');
+  }
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDigestModal(); });
+
+  async function confirmDigest() {
+    const weekRange = document.getElementById('digestWeekInput').value.trim();
+    closeDigestModal();
+    setLoading(true);
+    let data;
+    try {
+      const res = await fetch('/api/digest', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ week_range: weekRange }),
+      });
+      try { data = await res.json(); } catch { setLoading(false); showError('Server error generating digest.'); return; }
+      if (!res.ok) { setLoading(false); showError(data.error || 'Digest failed.'); return; }
+    } catch { setLoading(false); showError('Network error.'); return; }
+    setLoading(false);
+    hide('emptyState');
+    document.querySelectorAll('.sb-item').forEach(el => el.classList.remove('active'));
+    document.getElementById('articleOutput').innerHTML = `
+      <div class="article-wrap" id="articleWrap">
+        <div class="article-topbar">
+          <div class="at-meta">
+            <div class="at-title">📋 Weekly Digest</div>
+            <div class="at-sub">${data.video_count} videos · ${escHtml(data.week_range)}</div>
+          </div>
+          <div class="at-actions">
+            <button class="btn btn-ghost btn-sm" onclick="copyDigest()">📋 MD</button>
+            <button class="btn btn-ghost btn-sm" onclick="exportPdf()">⬇ PDF</button>
+            <button class="btn btn-ghost btn-sm" onclick="window.print()">🖨 Print</button>
+          </div>
+        </div>
+        <div class="article-body">${data.digest_html}</div>
+      </div>`;
+    window._digestMd = data.digest_md;
+    try { hljs.highlightAll(); } catch(e) {}
+    showToast('✓ Digest ready', 'success');
+  }
+
+  function copyDigest() {
+    if (!window._digestMd) return;
+    navigator.clipboard.writeText(window._digestMd).then(() => showToast('Copied!', 'success'));
+  }
+
+  // Delete individual summary
+  async function deleteSummary(id) {
+    await fetch(`/api/summary/${id}`, { method: 'DELETE' });
+    historyItems = historyItems.filter(s => s.id !== id);
+    renderSidebar();
+    // If the deleted item was active, clear the view
+    const active = document.querySelector('.sb-item.active');
+    if (!active) {
+      const ao = document.getElementById('articleOutput');
+      if (ao) ao.innerHTML = '';
+      show('emptyState');
+    }
+    showToast('Deleted.', 'success');
+  }
+
+
+  // Clear all
+  async function clearAll() {
+    if (!historyItems.length) return;
+    if (!confirm(`Delete all ${historyItems.length} summaries?`)) return;
+    await fetch('/api/clear', { method: 'DELETE' });
+    historyItems = [];
+    renderSidebar();
+    const ao = document.getElementById('articleOutput');
+    if (ao) ao.innerHTML = '';
+    show('emptyState');
+    showToast('Cleared.', 'success');
+  }
+
+  // Loading
+  function setLoading(on) {
+    const btn = document.getElementById('summarizeBtn');
+    if (btn) btn.disabled = on;
+    const ls = document.getElementById('loadingState');
+    if (ls) ls.style.display = on ? 'flex' : 'none';
+    if (on) {
+      hide('emptyState');
+      const ao = document.getElementById('articleOutput');
+      if (ao) ao.innerHTML = '';
+      const msgs = ['Fetching transcript…','Detecting content type…','Extracting insights…','Generating diagram…','Finalising…'];
+      let i = 0;
+      window._lt = setInterval(() => {
+        const lm = document.getElementById('loadingMsg');
+        if (lm) lm.textContent = msgs[i++ % msgs.length];
+      }, 2200);
+    } else { clearInterval(window._lt); }
+  }
+
+  function showError(msg) {
+    hide('emptyState');
+    const ao = document.getElementById('articleOutput');
+    if (ao) ao.innerHTML = `<div class="error-box">⚠ ${escHtml(msg)}</div>`;
+  }
+
+  function showToast(msg, type='success') {
+    const t = document.getElementById('toast');
+    t.textContent = msg; t.className = `toast ${type} show`;
+    clearTimeout(window._tt);
+    window._tt = setTimeout(() => t.classList.remove('show'), 3200);
+  }
+
+  // ── Search ──────────────────────────────────────────────────────────────────
+  let _searchTimer = null;
+  function onSearch(q) {
+    clearTimeout(_searchTimer);
+    if (!q.trim()) { renderSidebar(); return; }
+    _searchTimer = setTimeout(async () => {
+      const r = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
+      const d = await r.json();
+      renderSearchResults(d.results || []);
+    }, 300);
+  }
+
+  function renderSearchResults(results) {
+    const list = document.getElementById('sidebarList');
+    list.querySelectorAll('.sb-item').forEach(el => el.remove());
+    _sbEmpty.style.display = 'none';
+    if (!results.length) {
+      _sbEmpty.textContent = 'No matches found';
+      _sbEmpty.style.display = '';
+      if (!list.contains(_sbEmpty)) list.appendChild(_sbEmpty);
+      return;
+    }
+    results.forEach(s => {
+      const el = document.createElement('div');
+      el.className = 'sb-item';
+      el.dataset.id = s.id;
+      el.innerHTML = `
+        <div class="sb-item-text">
+          <div class="st">${escHtml(s.title)}</div>
+          <div class="sm">${escHtml(s.channel)} · ${fmtDate(s.created_at)}</div>
+          ${s.snippet ? `<div class="search-result-snippet">${escHtml(s.snippet)}</div>` : ''}
+        </div>
+        <button class="sb-del" title="Delete" onclick="event.stopPropagation();deleteSummary(${s.id})">✕</button>`;
+      el.addEventListener('click', () => loadSummary(s.id));
+      list.appendChild(el);
+    });
+  }
+
+  // ── Playlist ─────────────────────────────────────────────────────────────────
+  let _plVideos = [];
+
+  async function loadPlaylist(url) {
+    setLoading(true);
+    document.getElementById('loadingMsg').textContent = 'Loading playlist…';
+    let data;
+    try {
+      const res = await fetch('/api/playlist', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ url }),
+      });
+      try { data = await res.json(); } catch { setLoading(false); showError('Could not parse playlist response.'); return; }
+      if (!res.ok) { setLoading(false); showError(data.error || 'Playlist error.'); return; }
+    } catch { setLoading(false); showError('Network error loading playlist.'); return; }
+    setLoading(false);
+    _plVideos = data.videos || [];
+    document.getElementById('plTitle').textContent = data.title || 'Playlist';
+    const alreadyDone = new Set(historyItems.map(h => h.video_id));
+    const listEl = document.getElementById('plList');
+    listEl.innerHTML = '';
+    _plVideos.forEach((v, i) => {
+      const done = alreadyDone.has(v.id);
+      const dur = v.duration ? `${Math.floor(v.duration/60)}m` : '';
+      const item = document.createElement('label');
+      item.className = 'pl-item';
+      item.innerHTML = `
+        <input type="checkbox" data-idx="${i}" ${done ? '' : 'checked'} />
+        <div class="pl-item-info">
+          <div class="pl-item-title">${escHtml(v.title)}</div>
+          <div class="pl-item-meta">${escHtml(v.channel || '')}${dur ? ' · ' + dur : ''}${done ? ' ✓ cached' : ''}</div>
+        </div>`;
+      listEl.appendChild(item);
+    });
+    updatePlSelCount();
+    listEl.querySelectorAll('input').forEach(cb => cb.addEventListener('change', updatePlSelCount));
+    document.getElementById('plStatus').textContent = '';
+    document.getElementById('plProgressWrap').style.display = 'none';
+    document.getElementById('plStartBtn').disabled = false;
+    document.getElementById('plCancelBtn').textContent = 'Cancel';
+    document.getElementById('playlistModal').classList.add('open');
+  }
+
+  function updatePlSelCount() {
+    const total = document.querySelectorAll('#plList input[type=checkbox]').length;
+    const checked = document.querySelectorAll('#plList input[type=checkbox]:checked').length;
+    document.getElementById('plSelCount').textContent = `${checked} / ${total} selected`;
+  }
+
+  function plSelectAll(val) {
+    document.querySelectorAll('#plList input[type=checkbox]').forEach(cb => cb.checked = val);
+    updatePlSelCount();
+  }
+
+  function closePlaylistModal() {
+    document.getElementById('playlistModal').classList.remove('open');
+    _plVideos = [];
+  }
+
+  async function startPlaylistSummarize() {
+    const checks = [...document.querySelectorAll('#plList input[type=checkbox]')];
+    const selected = checks.map((cb, i) => cb.checked ? _plVideos[i] : null).filter(Boolean);
+    if (!selected.length) { showToast('Select at least one video.', 'error'); return; }
+
+    document.getElementById('plStartBtn').disabled = true;
+    document.getElementById('plCancelBtn').textContent = 'Close when done';
+    document.getElementById('plProgressWrap').style.display = 'block';
+    const bar = document.getElementById('plProgressBar');
+    const status = document.getElementById('plStatus');
+
+    let done = 0;
+    for (const v of selected) {
+      status.textContent = `Processing ${done + 1} / ${selected.length}: ${v.title.slice(0, 50)}…`;
+      bar.style.width = `${(done / selected.length) * 100}%`;
+      try {
+        const res = await fetch('/api/summarize', {
+          method: 'POST', headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ url: v.url }),
+        });
+        const d = await res.json();
+        if (res.ok && d.success) {
+          historyItems.unshift({ id: d.id, title: d.title, channel: d.channel, created_at: new Date().toISOString() });
+          renderSidebar();
+        }
+      } catch {}
+      done++;
+    }
+    bar.style.width = '100%';
+    status.textContent = `✓ Done — ${done} videos processed.`;
+    showToast(`✓ ${done} videos summarized`, 'success');
+  }
+
+  // ── Export: Obsidian ──────────────────────────────────────────────────────────
+  function exportObsidian(id) {
+    window.open(`/api/summary/${id}/obsidian`, '_blank');
+  }
+
+  // ── Export: Notion ────────────────────────────────────────────────────────────
+  async function exportNotion(id) {
+    showToast('Sending to Notion…', 'success');
+    try {
+      const res = await fetch(`/api/summary/${id}/notion`, { method: 'POST' });
+      const d = await res.json();
+      if (res.ok && d.url) {
+        showToast('✓ Sent to Notion!', 'success');
+        window.open(d.url, '_blank');
+      } else {
+        showToast(d.error || 'Notion export failed', 'error');
+      }
+    } catch { showToast('Network error', 'error'); }
+  }
+
+  function escHtml(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function fmtDate(iso) { try { return new Date(iso).toLocaleDateString('en-US',{month:'short',day:'numeric'}); } catch { return ''; } }
+
+  // ── Usage badge ──────────────────────────────────────────────────────────────
+  async function refreshUsage() {
+    try {
+      const r = await fetch('/api/usage');
+      const d = await r.json();
+      const badge = document.getElementById('usageBadge');
+      if (!badge) return;
+      badge.textContent = `${d.used} / ${d.limit} today`;
+      badge.style.color = d.remaining === 0 ? 'var(--accent2)' : 'var(--muted)';
+    } catch {}
+  }
+  refreshUsage();
+
+  document.getElementById('urlInput').addEventListener('keydown', e => { if (e.key==='Enter') summarize(); });
+</script>
+</body>
+</html>
