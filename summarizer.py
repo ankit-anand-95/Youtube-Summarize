@@ -90,12 +90,12 @@ def fetch_transcript(video_id: str):
         text = re.sub(r"\s+", " ", text).strip()
         return text, transcript.language_code
 
-    except TranscriptsDisabled:
-        raise ValueError("Transcripts are disabled for this video.")
-    except NoTranscriptFound:
-        raise ValueError("No transcript found. The creator may not have enabled captions.")
+    except TranscriptsDisabled as e:
+        raise ValueError(f"Transcripts are disabled for this video. (raw: {str(e)[:200]})")
+    except NoTranscriptFound as e:
+        raise ValueError(f"No transcript found. (raw: {str(e)[:200]})")
     except Exception as e:
-        raise ValueError(f"Could not fetch transcript: {str(e)}")
+        raise ValueError(f"Could not fetch transcript: {str(e)[:400]}")
 
 
 def get_claude_client(api_key: str = None):
