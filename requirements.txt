@@ -1,6 +1,6 @@
 flask>=3.0.0
 anthropic>=0.25.0
-youtube-transcript-api==0.6.2
+youtube-transcript-api
 python-dotenv>=1.0.0
 markdown>=3.6
 yt-dlp>=2024.1.1

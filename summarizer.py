@@ -67,13 +67,24 @@ def fetch_video_metadata(video_id: str):
 
 
 def fetch_transcript(video_id: str):
-    # Uses class-method API (youtube-transcript-api 0.6.x)
-    # Set PROXY_URL env var if your host's IPs are blocked by YouTube
+    """Fetch transcript using youtube-transcript-api (auto-detects API version)."""
     proxy_url = os.getenv("PROXY_URL", "").strip()
-    proxies = {"https": proxy_url, "http": proxy_url} if proxy_url else None
+
+    def _get_transcript_list():
+        # Try newer instance-based API first (0.7.x+)
+        try:
+            api = YouTubeTranscriptApi()
+            return api.list(video_id)
+        except TypeError:
+            pass
+        # Fall back to class-method API (0.6.x)
+        kwargs = {}
+        if proxy_url:
+            kwargs["proxies"] = {"https": proxy_url, "http": proxy_url}
+        return YouTubeTranscriptApi.list_transcripts(video_id, **kwargs)
+
     try:
-        kwargs = {"proxies": proxies} if proxies else {}
-        transcript_list = YouTubeTranscriptApi.list_transcripts(video_id, **kwargs)
+        transcript_list = _get_transcript_list()
         try:
             transcript = transcript_list.find_manually_created_transcript(["en"])
         except Exception:
@@ -91,9 +102,9 @@ def fetch_transcript(video_id: str):
         return text, transcript.language_code
 
     except TranscriptsDisabled as e:
-        raise ValueError(f"Transcripts are disabled for this video. (raw: {str(e)[:200]})")
+        raise ValueError(f"Transcripts are disabled for this video. ({str(e)[:200]})")
     except NoTranscriptFound as e:
-        raise ValueError(f"No transcript found. (raw: {str(e)[:200]})")
+        raise ValueError(f"No transcript found. ({str(e)[:200]})")
     except Exception as e:
         raise ValueError(f"Could not fetch transcript: {str(e)[:400]}")
 
